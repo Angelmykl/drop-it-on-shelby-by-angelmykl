@@ -1,0 +1,44 @@
+.container{max-width:1100px;margin:0 auto;padding:1.25rem}
+.header{display:flex;flex-direction:column;gap:.5rem;align-items:center;text-align:center;padding:1.25rem 0}
+.title{color:var(--pink);font-size:1.9rem;margin:0}
+.byline{margin:0;color:var(--muted)}
+.welcome{margin:.25rem 0 0 0}
+.topbar{display:flex;gap:.75rem;flex-wrap:wrap;justify-content:center;align-items:center;margin-top:.7rem}
+.grid{display:grid;grid-template-columns:1fr;gap:1rem}
+.card{background:rgba(20,20,28,.92);border:1px solid rgba(245,160,200,.18);border-radius:18px;padding:1rem;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.drop{border:2px dashed rgba(245,160,200,.7);border-radius:18px;padding:1.25rem;text-align:center;transition:.15s;background:rgba(245,160,200,.04)}
+.dropActive{background:rgba(245,160,200,.08);transform:translateY(-1px)}
+.row{display:grid;grid-template-columns:1fr;gap:.75rem;margin-top:.9rem}
+.durationGrid{display:grid;grid-template-columns:repeat(2,1fr);gap:.5rem}
+.durBtn{padding:.6rem .7rem;border-radius:14px;border:1px solid rgba(245,160,200,.3);background:#101017}
+.durBtnActive{border-color:var(--pink);background:rgba(245,160,200,.10)}
+.fileList{display:flex;flex-direction:column;gap:.75rem}
+.fileCard{background:rgba(24,24,34,.92);border:1px solid rgba(245,160,200,.16);border-radius:18px;padding:1rem;display:flex;flex-direction:column;gap:.65rem}
+.fileTop{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}
+.fileName{font-weight:900}
+.meta{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.15rem}
+.chip{border:1px solid rgba(245,160,200,.26);padding:.25rem .5rem;border-radius:999px;color:var(--muted);font-size:.85rem}
+.cidRow{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.cidText{color:var(--muted);font-size:.9rem;word-break:break-all}
+.progressWrap{height:10px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden}
+.progress{height:100%;background:var(--pink);width:50%}
+.actions{display:flex;flex-wrap:wrap;gap:.5rem}
+.actions button{flex:1;min-width:150px}
+.split{display:grid;grid-template-columns:1fr;gap:1rem}
+.footer{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;align-items:center;margin:1.5rem 0;color:var(--muted)}
+hr.sep{border:none;border-top:1px solid rgba(245,160,200,.14);margin:1rem 0}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:1rem}
+.modal{max-width:520px;width:100%;background:rgba(20,20,28,.98);border:1px solid rgba(245,160,200,.22);border-radius:18px;padding:1rem;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modalHeader{display:flex;justify-content:space-between;align-items:center;gap:1rem}
+.walletList{display:flex;flex-direction:column;gap:.5rem;margin-top:.75rem}
+.walletBtn{display:flex;align-items:center;justify-content:space-between;gap:.75rem;width:100%}
+.walletLeft{display:flex;align-items:center;gap:.6rem}
+.icon{width:22px;height:22px;border-radius:6px;background:rgba(245,160,200,.12);display:inline-flex;align-items:center;justify-content:center;overflow:hidden}
+.icon img{width:100%;height:100%;object-fit:cover}
+@media(min-width:860px){
+  .grid{grid-template-columns:1.05fr .95fr}
+  .split{grid-template-columns:1fr 1fr}
+  .fileCard{flex-direction:row;justify-content:space-between;align-items:center}
+  .actions{justify-content:flex-end}
+  .actions button{flex:0 0 auto}
+}

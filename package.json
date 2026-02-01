@@ -1,0 +1,22 @@
+{
+  "name": "dios-drop-it-on-shelby",
+  "version": "2.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "14.1.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "buffer": "^6.0.3",
+    "@aptos-labs/wallet-adapter-react": "^4.0.0",
+    "@aptos-labs/ts-sdk": "^5.1.1",
+    "@shelby-protocol/sdk": "^0.0.7"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
