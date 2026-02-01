@@ -3,7 +3,6 @@ import { AptosWalletAdapterProvider } from "@aptos-labs/wallet-adapter-react";
 import { Network } from "@aptos-labs/ts-sdk";
 
 // Patch global fetch in the browser to route ShelbyNet API calls through our same-origin proxy.
-// This avoids CORS issues when libraries try to call https://api.shelbynet.shelby.xyz directly.
 if (typeof window !== "undefined" && !window.__shelbyFetchPatched) {
   const _origFetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
@@ -21,14 +20,12 @@ if (typeof window !== "undefined" && !window.__shelbyFetchPatched) {
   window.__shelbyFetchPatched = true;
 }
 
-
-
 export default function App({ Component, pageProps }) {
   return (
     <AptosWalletAdapterProvider
       autoConnect={true}
       dappConfig={{
-        network: Network.SHELBYNET,
+        network: Network.TESTNET, // ✅ wallet adapter supports this
       }}
       onError={(e) => console.log("Wallet adapter error:", e)}
     >
