@@ -1,84 +1,64 @@
-// Generic server-side proxy for ShelbyNet API to bypass browser CORS.
-// Route: /api/shelbynet/<any path>
-//
-// Vercel → Project → Settings → Environment Variables:
-//   SHELBYNET_API_KEY = <your key>
-//
-// NOTE: This is server-side only. Do NOT prefix it with NEXT_PUBLIC.
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-async function forward(req, targetUrl, headers) {
-  const init = {
-    method: req.method,
-    headers,
-  };
-
-  // Stream body for non-GET/HEAD requests
-  if (req.method && !["GET", "HEAD"].includes(req.method.toUpperCase())) {
-    init.body = req;
-  }
-
-  return fetch(targetUrl, init);
-}
+/**
+ * pages/api/shelbynet/[...path].js
+ * Generic server-side proxy for ShelbyNet API calls.
+ * Adds the SHELBYNET_API_KEY (server-only env var) so it is never exposed to the browser.
+ * Fixes CORS errors that occur when the browser hits https://api.shelbynet.shelby.xyz directly.
+ */
 
 export default async function handler(req, res) {
-  const pathParts = Array.isArray(req.query.path) ? req.query.path : [req.query.path];
-  const tailPath = pathParts.filter(Boolean).join("/");
+  const { path } = req.query;
+  const shelbyPath = Array.isArray(path) ? path.join("/") : path || "";
 
-  // Preserve querystring
-  const qsIndex = (req.url || "").indexOf("?");
-  const qs = qsIndex >= 0 ? (req.url || "").slice(qsIndex) : "";
+  // Preserve any query string from the original request
+  const rawUrl = req.url || "";
+  const qIndex = rawUrl.indexOf("?");
+  const qs = qIndex !== -1 ? rawUrl.slice(qIndex) : "";
 
-  const targetUrl = `https://api.shelbynet.shelby.xyz/${tailPath}${qs}`;
-  const apiKey = process.env.SHELBYNET_API_KEY;
+  const targetUrl = `https://api.shelbynet.shelby.xyz/${shelbyPath}${qs}`;
 
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "Missing SHELBYNET_API_KEY",
-      hint: "Set SHELBYNET_API_KEY in Vercel (Production + Preview + Development) and redeploy.",
-    });
+  // Build upstream headers
+  const upstreamHeaders = {
+    "Content-Type": req.headers["content-type"] || "application/octet-stream",
+  };
+  if (process.env.SHELBYNET_API_KEY) {
+    upstreamHeaders["Authorization"] = `Bearer ${process.env.SHELBYNET_API_KEY}`;
+  }
+  // Forward accept header if present
+  if (req.headers["accept"]) {
+    upstreamHeaders["Accept"] = req.headers["accept"];
+  }
+
+  const fetchOptions = { method: req.method, headers: upstreamHeaders };
+
+  // Stream request body for non-GET/HEAD methods
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    if (chunks.length > 0) {
+      fetchOptions.body = Buffer.concat(chunks);
+    }
   }
 
   try {
-    // Copy incoming headers except hop-by-hop / host
-    const baseHeaders = {};
-    for (const [k, v] of Object.entries(req.headers || {})) {
-      const key = k.toLowerCase();
-      if (["host", "connection", "content-length"].includes(key)) continue;
-      if (typeof v === "string") baseHeaders[k] = v;
-    }
+    const upstream = await fetch(targetUrl, fetchOptions);
 
-    // Try a few common header conventions (stop on first non-401)
-    const attempts = [
-      { ...baseHeaders, "x-api-key": apiKey },
-      { ...baseHeaders, "x-shelby-api-key": apiKey },
-      { ...baseHeaders, "x-geomi-api-key": apiKey },
-      { ...baseHeaders, Authorization: `Bearer ${apiKey}` },
-      { ...baseHeaders, Authorization: apiKey },
-    ];
+    // Forward response headers
+    const contentType = upstream.headers.get("content-type");
+    const contentLength = upstream.headers.get("content-length");
+    res.status(upstream.status);
+    if (contentType) res.setHeader("Content-Type", contentType);
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    res.setHeader("Access-Control-Allow-Origin", "*");
 
-    let response;
-    for (const headers of attempts) {
-      response = await forward(req, targetUrl, headers);
-      if (response.status !== 401) break;
-    }
-
-    res.status(response.status);
-    const contentType = response.headers.get("content-type");
-    if (contentType) res.setHeader("content-type", contentType);
-
-    const buf = Buffer.from(await response.arrayBuffer());
-    res.send(buf);
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    res.send(buffer);
   } catch (err) {
-    res.status(500).json({
-      error: "Shelby proxy failed",
-      details: String(err),
-      targetUrl,
-    });
+    console.error("[shelbynet proxy] error:", err);
+    res.status(502).json({ error: "Proxy error", message: err.message });
   }
 }
+
+// Disable Next.js body parsing so we can stream binary blobs correctly
+export const config = {
+  api: { bodyParser: false },
+};

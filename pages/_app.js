@@ -22,10 +22,14 @@ if (typeof window !== "undefined" && !window.__shelbyFetchPatched) {
 
 export default function App({ Component, pageProps }) {
   return (
+    // Network.TESTNET here is only used by the AptosConnect (Google login) plugin
+    // which crashes on Network.CUSTOM. Extension wallets like Petra/Martian ignore
+    // this value and use whatever network they are manually set to in the extension.
+    // Make sure your Petra/Martian wallet is switched to ShelbyNet (see README).
     <AptosWalletAdapterProvider
       autoConnect={true}
       dappConfig={{
-        network: Network.TESTNET, // ✅ wallet adapter supports this
+        network: Network.TESTNET,
       }}
       onError={(e) => console.log("Wallet adapter error:", e)}
     >

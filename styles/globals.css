@@ -1,21 +1,162 @@
-:root{
-  --bg:#0b0b0f;
-  --panel:#14141c;
-  --panel2:#181822;
-  --pink:#f5a0c8;
-  --text:#f6f6f9;
-  --muted:rgba(246,246,249,.75);
-  --danger:#5c1d2e;
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap');
+
+/* ── Dark theme (default) ──────────────────────────────────────────────────── */
+:root, [data-theme="dark"] {
+  --accent:       #a855f7;
+  --accent-bright:#c084fc;
+  --accent-glow:  rgba(168,85,247,.45);
+  --accent-dim:   rgba(168,85,247,.08);
+  --cyan:         #00d4ff;
+  --green:        #00e5a0;
+  --red:          #ff5566;
+  --bg:           #06040f;
+  --bg2:          #09060e;
+  --surface:      rgba(14,10,26,.92);
+  --surface2:     rgba(20,14,36,.95);
+  --border:       rgba(168,85,247,.16);
+  --border-hi:    rgba(168,85,247,.38);
+  --muted:        #7b6a9a;
+  --text:         #ede8ff;
+  --text-inv:     #06040f;
+  --card-bg:      rgba(14,10,26,.92);
+  --input-bg:     rgba(9,6,18,.85);
+  --grid-color:   rgba(168,85,247,.025);
+  --shadow:       0 8px 32px rgba(0,0,0,.45);
 }
-*{box-sizing:border-box}
-html,body{padding:0;margin:0;background:linear-gradient(180deg,var(--bg),#12121a);color:var(--text);font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial}
-a{color:var(--pink);text-decoration:none}
-button,input,select,textarea{font:inherit}
-button{cursor:pointer;border:none;border-radius:12px;padding:.75rem 1rem;background:#2a2a38;color:var(--text)}
-button.primary{background:var(--pink);color:#0b0b0f;font-weight:800}
-button.ghost{background:transparent;border:1px solid rgba(245,160,200,.4)}
-button.danger{background:var(--danger)}
-button:disabled{opacity:.55;cursor:not-allowed}
-input,select,textarea{width:100%;padding:.7rem .8rem;border-radius:12px;border:1px solid rgba(245,160,200,.35);background:#101017;color:var(--text)}
-textarea{min-height:92px;resize:vertical}
-small{color:var(--muted)}
+
+/* ── Light theme ───────────────────────────────────────────────────────────── */
+[data-theme="light"] {
+  --accent:       #7c3aed;
+  --accent-bright:#9333ea;
+  --accent-glow:  rgba(124,58,237,.3);
+  --accent-dim:   rgba(124,58,237,.07);
+  --cyan:         #0284c7;
+  --green:        #059669;
+  --red:          #dc2626;
+  --bg:           #f8f5ff;
+  --bg2:          #f0ebff;
+  --surface:      rgba(255,255,255,.92);
+  --surface2:     rgba(248,245,255,.95);
+  --border:       rgba(124,58,237,.16);
+  --border-hi:    rgba(124,58,237,.35);
+  --muted:        #7c6b9a;
+  --text:         #1a0f2e;
+  --text-inv:     #f8f5ff;
+  --card-bg:      rgba(255,255,255,.92);
+  --input-bg:     rgba(255,255,255,.9);
+  --grid-color:   rgba(124,58,237,.04);
+  --shadow:       0 4px 24px rgba(124,58,237,.1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Syne', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: background .3s ease, color .3s ease;
+}
+
+/* Animated grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: 64px 64px;
+  pointer-events: none;
+  z-index: 0;
+  animation: gridDrift 60s linear infinite;
+}
+@keyframes gridDrift {
+  from { background-position: 0 0; }
+  to   { background-position: 64px 64px; }
+}
+
+/* Ambient glow */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 50% at 15% 10%, var(--accent-dim) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 60% at 85% 90%, rgba(0,212,255,.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+button {
+  font-family: 'Syne', sans-serif;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  transition: all .2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+button:not(.ghost) {
+  background: linear-gradient(135deg, var(--accent-bright) 0%, var(--accent) 100%);
+  color: #fff;
+  font-weight: 800;
+  padding: .7rem 1.4rem;
+  border-radius: 12px;
+  font-size: .85rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  box-shadow: 0 0 24px var(--accent-glow), 0 4px 12px rgba(0,0,0,.3);
+  min-height: 44px;
+}
+button:not(.ghost):hover:not(:disabled) {
+  box-shadow: 0 0 40px var(--accent-glow), 0 4px 20px rgba(0,0,0,.3);
+  transform: translateY(-2px);
+}
+button:not(.ghost):active:not(:disabled) { transform: translateY(0); }
+button:not(.ghost):disabled { opacity:.35; cursor:not-allowed; transform:none; box-shadow:none; }
+
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  padding: .5rem .9rem;
+  border-radius: 10px;
+  font-size: .82rem;
+  border: 1px solid var(--border);
+  min-height: 36px;
+}
+button.ghost:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+/* ── Inputs ───────────────────────────────────────────────────────────────── */
+input, textarea {
+  font-family: 'Space Mono', monospace;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+input:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity:.6; }
+
+a { color: var(--accent); text-decoration: none; transition: opacity .2s; }
+a:hover { opacity:.75; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 99px; }
+
+@keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
+@keyframes slideUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
