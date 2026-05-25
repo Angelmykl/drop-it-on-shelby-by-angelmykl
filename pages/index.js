@@ -58,6 +58,14 @@ function fileIcon(type) {
   return "📄";
 }
 
+// ── Helpers to read/write localStorage ────────────────────────────────────
+function loadFromStorage(key, fallback = []) {
+  try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; } catch { return fallback; }
+}
+function saveToStorage(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
 async function aesEncrypt(fileBytes) {
   const keyRaw = crypto.getRandomValues(new Uint8Array(32));
   const iv     = crypto.getRandomValues(new Uint8Array(12));
@@ -94,7 +102,7 @@ function parseLink(raw) {
   return null;
 }
 
-const PREVIEW_COUNT = 2; // files shown before "show more"
+const PREVIEW_COUNT = 2;
 
 export default function Home() {
   const { connected, connect, disconnect, wallets, wallet, account,
@@ -103,26 +111,26 @@ export default function Home() {
   const addr         = account?.address?.toString?.() || account?.address || "";
   const activeWallet = wallet?.name || "";
 
-  // ── State ─────────────────────────────────────────────────────────────────
-  const [theme,        setTheme]        = useState("dark");
-  const [durationKey,  setDurationKey]  = useState("24h");
-  const [destroyOnExp, setDestroyOnExp] = useState(true);
-  const [files,        setFiles]        = useState([]);
-  const [shared,       setShared]       = useState([]);
-  const [showAllFiles, setShowAllFiles] = useState(false);
-  const [showAllShared,setShowAllShared]= useState(false);
-  const [shareModal,   setShareModal]   = useState(false);
-  const [shareTarget,  setShareTarget]  = useState(null);
-  const [toAddr,       setToAddr]       = useState("");
-  const [shareStatus,  setShareStatus]  = useState("");
-  const [lastLink,     setLastLink]     = useState(null);
-  const [findLink,     setFindLink]     = useState("");
-  const [log,          setLog]          = useState(null);
-  const [dropActive,   setDropActive]   = useState(false);
-  const [walletModal,  setWalletModal]  = useState(false);
-  const [busy,         setBusy]         = useState(false);
-  const [finding,      setFinding]      = useState(false);
-  const [tick,         setTick]         = useState(0);
+  // ── State — initialised DIRECTLY from localStorage (no race condition) ──
+  const [theme,         setTheme]         = useState("dark");
+  const [durationKey,   setDurationKey]   = useState("24h");
+  const [destroyOnExp,  setDestroyOnExp]  = useState(true);
+  const [files,         setFiles]         = useState([]);
+  const [shared,        setShared]        = useState([]);
+  const [showAllFiles,  setShowAllFiles]  = useState(false);
+  const [showAllShared, setShowAllShared] = useState(false);
+  const [shareModal,    setShareModal]    = useState(false);
+  const [shareTarget,   setShareTarget]   = useState(null);
+  const [toAddr,        setToAddr]        = useState("");
+  const [shareStatus,   setShareStatus]   = useState("");
+  const [lastLink,      setLastLink]      = useState(null);
+  const [findLink,      setFindLink]      = useState("");
+  const [log,           setLog]           = useState(null);
+  const [dropActive,    setDropActive]    = useState(false);
+  const [walletModal,   setWalletModal]   = useState(false);
+  const [busy,          setBusy]          = useState(false);
+  const [finding,       setFinding]       = useState(false);
+  const [tick,          setTick]          = useState(0);
 
   const fileInput  = useRef(null);
   const durMs      = useMemo(() => DURATIONS.find(d => d.key === durationKey)?.ms ?? 86_400_000, [durationKey]);
@@ -130,40 +138,49 @@ export default function Home() {
   const shelby     = useMemo(() => new ShelbyClient({ network: Network.SHELBYNET }), []);
   const aptos      = useMemo(() => new Aptos(new AptosConfig({ network: Network.SHELBYNET })), []);
 
-  // Apply theme to <html>
+  // Load from localStorage after mount (client-only — avoids SSR hydration mismatch)
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("dios:theme", theme);
-  }, [theme]);
-
-  // Load saved theme
-  useEffect(() => {
-    const saved = localStorage.getItem("dios:theme");
-    if (saved === "light" || saved === "dark") setTheme(saved);
+    const savedTheme = localStorage.getItem("dios:theme");
+    if (savedTheme === "light" || savedTheme === "dark") setTheme(savedTheme);
+    const savedFiles  = loadFromStorage("dios:files");
+    const savedShared = loadFromStorage("dios:shared");
+    if (savedFiles.length)  setFiles(savedFiles);
+    if (savedShared.length) setShared(savedShared);
   }, []);
 
-  // Persist files
-  useEffect(() => { try { const s = localStorage.getItem("dios:files"); if (s) setFiles(JSON.parse(s)); } catch {} }, []);
-  useEffect(() => { try { localStorage.setItem("dios:files", JSON.stringify(files)); } catch {} }, [files]);
-  useEffect(() => { try { const s = localStorage.getItem("dios:shared"); if (s) setShared(JSON.parse(s)); } catch {} }, []);
-  useEffect(() => { try { localStorage.setItem("dios:shared", JSON.stringify(shared)); } catch {} }, [shared]);
+  // Apply theme
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    saveToStorage("dios:theme", theme);
+  }, [theme]);
 
-  // Ticker
+  // Ticker for countdown
   useEffect(() => { const t = setInterval(() => setTick(n => n+1), 1000); return () => clearInterval(t); }, []);
 
-  // Expiry sweep
+  // Expiry sweep — runs every second, saves updated list directly
   useEffect(() => {
     const now = Date.now();
-    const sweep = (set, getOwner) => set(prev => prev.filter(f => {
-      const exp = f.expiresAt && now >= f.expiresAt;
-      if (exp && destroyOnExp) {
-        localStorage.removeItem(`dios:key:${getOwner(f)}:${f.name}`);
-        localStorage.removeItem(`dios:iv:${getOwner(f)}:${f.name}`);
-      }
-      return !exp;
-    }));
-    sweep(setFiles,  f => f.owner);
-    sweep(setShared, f => f.owner);
+    const sweep = (list, getOwner) => {
+      const kept = list.filter(f => {
+        const exp = f.expiresAt && now >= f.expiresAt;
+        if (exp && destroyOnExp) {
+          localStorage.removeItem(`dios:key:${getOwner(f)}:${f.name}`);
+          localStorage.removeItem(`dios:iv:${getOwner(f)}:${f.name}`);
+        }
+        return !exp;
+      });
+      return kept;
+    };
+    setFiles(prev => {
+      const kept = sweep(prev, f => f.owner);
+      if (kept.length !== prev.length) saveToStorage("dios:files", kept);
+      return kept.length !== prev.length ? kept : prev;
+    });
+    setShared(prev => {
+      const kept = sweep(prev, f => f.owner);
+      if (kept.length !== prev.length) saveToStorage("dios:shared", kept);
+      return kept.length !== prev.length ? kept : prev;
+    });
   }, [tick, destroyOnExp]);
 
   function setInfo(msg) { setLog({ msg, type: "info" }); }
@@ -185,7 +202,7 @@ export default function Home() {
     catch(e) { setErr(`Connect failed: ${e?.message||e}`); }
   }
 
-  // Upload
+  // Upload — saves directly to localStorage after success
   async function handleFile(file) {
     if (!addr) return setErr("Connect your wallet first.");
     if (!signAndSubmitTransaction) return setErr("Wallet doesn't support signAndSubmitTransaction.");
@@ -217,12 +234,18 @@ export default function Home() {
       setInfo("📡 Uploading encrypted file to Shelby…");
       await shelby.rpc.putBlob({ account: addr, blobName: file.name, blobData: cipher });
 
-      setFiles(prev => [{
+      const newEntry = {
         name: file.name, owner: addr, size: file.size,
         type: file.type || "file", expiresAt, uploadedAt: Date.now(),
         cid: `${addr}/${file.name}`,
-      }, ...prev]);
-      setShowAllFiles(false); // reset to show most recent
+      };
+      // Save directly — no useEffect dependency needed
+      setFiles(prev => {
+        const updated = [newEntry, ...prev];
+        saveToStorage("dios:files", updated);
+        return updated;
+      });
+      setShowAllFiles(false);
       setOk(`✅ "${file.name}" is now encrypted and stored on Shelby!`);
     } catch(e) { setErr(`Upload failed: ${e?.message||e}`); }
     finally { setBusy(false); }
@@ -231,7 +254,7 @@ export default function Home() {
   async function onInput(e) { const f = e.target.files?.[0]; if (f) await handleFile(f); e.target.value = ""; }
   async function onDrop(e)  { e.preventDefault(); setDropActive(false); const f = e.dataTransfer.files?.[0]; if (f) await handleFile(f); }
 
-  // Download own
+  // Download own file
   async function download(file) {
     try {
       setInfo("📡 Fetching from Shelby…");
@@ -301,7 +324,7 @@ export default function Home() {
     finally { setBusy(false); }
   }
 
-  // Find shared file
+  // Find shared file — saves directly to localStorage
   async function doFind() {
     if (!findLink.trim()) return setErr("Paste a Share Link first.");
     if (!addr) return setErr("Connect your wallet first.");
@@ -322,10 +345,16 @@ export default function Home() {
       localStorage.setItem(`dios:key:${pkg.fileOwner}:${pkg.fileName}`, keyB64);
       localStorage.setItem(`dios:iv:${pkg.fileOwner}:${pkg.fileName}`, ivB64);
 
-      setShared(prev => prev.some(f => f.name === pkg.fileName && f.owner === pkg.fileOwner) ? prev : [{
+      const newEntry = {
         name: pkg.fileName, owner: pkg.fileOwner, sharedBy: pkg.from,
         cid: pkg.cid, expiresAt: pkg.expiresAt, uploadedAt: Date.now(), size: 0, type: "shared",
-      }, ...prev]);
+      };
+      setShared(prev => {
+        if (prev.some(f => f.name === pkg.fileName && f.owner === pkg.fileOwner)) return prev;
+        const updated = [newEntry, ...prev];
+        saveToStorage("dios:shared", updated);
+        return updated;
+      });
       setFindLink("");
       setShowAllShared(false);
       setOk(`✅ "${pkg.fileName}" unlocked — sign with your wallet to download.`);
@@ -333,7 +362,7 @@ export default function Home() {
     finally { setFinding(false); }
   }
 
-  // Sign & Download
+  // Sign & Download shared
   async function downloadShared(file) {
     try {
       const key = localStorage.getItem(`dios:key:${file.owner}:${file.name}`);
@@ -354,17 +383,16 @@ export default function Home() {
     } catch(e) { setErr(`Download failed: ${e?.message||e}`); }
   }
 
-  // Log colours
   const logStyle = {
     ok:   { bg: "rgba(0,229,160,.08)",  border: "rgba(0,229,160,.3)",  color: "var(--green)" },
     err:  { bg: "rgba(255,85,102,.08)", border: "rgba(255,85,102,.3)", color: "var(--red)" },
     info: { bg: "var(--accent-dim)",    border: "var(--border)",       color: "var(--muted)" },
   };
 
-  const visibleFiles  = showAllFiles  ? files  : files.slice(0, PREVIEW_COUNT);
+  const myFiles       = files.filter(f => f.owner === addr);
+  const visibleFiles  = showAllFiles  ? myFiles  : myFiles.slice(0, PREVIEW_COUNT);
   const visibleShared = showAllShared ? shared : shared.slice(0, PREVIEW_COUNT);
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <>
       <Head>
@@ -377,21 +405,20 @@ export default function Home() {
         <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Space+Mono:wght@400;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       </Head>
 
-      {/* ── Theme toggle (fixed top-right) ─────────────────────────────── */}
+      {/* Theme toggle */}
       <button
         className={`${styles.themeToggle} ${theme === "dark" ? styles.themeToggleDark : styles.themeToggleLight}`}
         onClick={() => setTheme(t => t === "dark" ? "light" : "dark")}
         aria-label="Toggle theme"
-        title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
       >
-        <span style={{ fontSize: ".7rem", userSelect: "none" }}>{theme === "dark" ? "🌙" : "☀️"}</span>
+        <span style={{ fontSize:".7rem", userSelect:"none" }}>{theme === "dark" ? "🌙" : "☀️"}</span>
         <span className={styles.themeToggleKnob} />
-        <span style={{ fontSize: ".7rem", userSelect: "none" }}>{theme === "dark" ? "☀️" : "🌙"}</span>
+        <span style={{ fontSize:".7rem", userSelect:"none" }}>{theme === "dark" ? "☀️" : "🌙"}</span>
       </button>
 
       <div className={styles.container}>
 
-        {/* ── Header ────────────────────────────────────────────────────── */}
+        {/* Header */}
         <div className={styles.header}>
           <h1 className={styles.title}>Drop It On Shelby</h1>
           <p className={styles.byline}>by Angelmykl · Powered by ShelbyNet</p>
@@ -414,12 +441,12 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── Log bar ───────────────────────────────────────────────────── */}
+        {/* Log bar */}
         {log && (
           <div style={{
-            background: logStyle[log.type].bg, border: `1px solid ${logStyle[log.type].border}`,
+            background:logStyle[log.type].bg, border:`1px solid ${logStyle[log.type].border}`,
             borderRadius:14, padding:".7rem 1rem", margin:"0 0 1.25rem",
-            fontSize:".84rem", color: logStyle[log.type].color, wordBreak:"break-word",
+            fontSize:".84rem", color:logStyle[log.type].color, wordBreak:"break-word",
             display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:"1rem",
             animation:"slideUp .2s ease",
           }}>
@@ -429,7 +456,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* ── Share Link card ───────────────────────────────────────────── */}
+        {/* Share Link card */}
         {lastLink && (
           <div style={{
             background:"rgba(0,229,160,.06)", border:"1px solid rgba(0,229,160,.25)",
@@ -444,7 +471,7 @@ export default function Home() {
                 style={{ fontSize:".7rem", padding:".2rem .5rem", minHeight:"auto" }}>✕</button>
             </div>
             <p style={{ fontSize:".75rem", color:"var(--muted)", marginBottom:".6rem", lineHeight:1.5 }}>
-              Send this Share Link to the receiver. They paste it in "Shared with Me" to unlock the file.
+              Send this Share Link to the receiver — they paste it in "Shared with Me" to unlock the file.
             </p>
             <div style={{ display:"flex", gap:".5rem" }}>
               <input readOnly value={lastLink.link}
@@ -454,7 +481,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* ── Main grid ─────────────────────────────────────────────────── */}
         <div className={styles.grid}>
 
           {/* LEFT: Upload + My Files */}
@@ -462,7 +488,6 @@ export default function Home() {
             <div className={styles.card}>
               <div className={styles.cardTitle}>📤 Upload</div>
 
-              {/* Duration selection — selected state is bold + glowing + has ✓ */}
               <div className={styles.durationGrid}>
                 {DURATIONS.map(d => (
                   <button key={d.key} type="button"
@@ -472,8 +497,7 @@ export default function Home() {
                   </button>
                 ))}
               </div>
-              {/* Show selected duration as text confirmation */}
-              <p style={{ fontSize:".75rem", color:"var(--accent)", marginBottom:".65rem", marginLeft:".25rem", fontWeight:600 }}>
+              <p style={{ fontSize:".74rem", color:"var(--accent)", marginBottom:".65rem", marginLeft:".25rem", fontWeight:600 }}>
                 ⏱ Files will expire after: <strong>{DURATIONS.find(d => d.key === durationKey)?.label}</strong>
               </p>
 
@@ -492,13 +516,12 @@ export default function Home() {
               </div>
               <input ref={fileInput} type="file" style={{ display:"none" }} onChange={onInput} />
 
-              {/* My Files */}
-              {files.length > 0 && (
+              {connected && myFiles.length > 0 && (
                 <>
                   <div className={styles.sep} />
                   <div className={styles.cardTitle}>🗃 My Files
                     <span style={{ fontSize:".65rem", color:"var(--muted)", fontFamily:"Syne,sans-serif", letterSpacing:".05em", textTransform:"none", fontWeight:500 }}>
-                      {files.length} file{files.length !== 1 ? "s" : ""}
+                      {myFiles.length} file{myFiles.length !== 1 ? "s" : ""}
                     </span>
                   </div>
                   <div className={styles.fileList}>
@@ -523,17 +546,15 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  {files.length > PREVIEW_COUNT && (
+                  {myFiles.length > PREVIEW_COUNT && (
                     <button className={`ghost ${styles.showMoreBtn}`}
                       onClick={() => setShowAllFiles(s => !s)} type="button">
-                      {showAllFiles
-                        ? "▲ Show less"
-                        : `▼ Show ${files.length - PREVIEW_COUNT} more file${files.length - PREVIEW_COUNT !== 1 ? "s" : ""}`}
+                      {showAllFiles ? "▲ Show less" : `▼ Show ${myFiles.length - PREVIEW_COUNT} more file${myFiles.length - PREVIEW_COUNT !== 1 ? "s" : ""}`}
                     </button>
                   )}
                 </>
               )}
-              {files.length === 0 && (
+              {myFiles.length === 0 && (
                 <p style={{ textAlign:"center", color:"var(--muted)", fontSize:".82rem", marginTop:"1rem" }}>
                   No files yet — drop one above ↑
                 </p>
@@ -545,7 +566,6 @@ export default function Home() {
           <div>
             <div className={styles.card} style={{ height:"100%" }}>
               <div className={styles.cardTitle}>📥 Shared with Me</div>
-
               {!connected ? (
                 <div style={{ textAlign:"center", padding:"2rem 1rem" }}>
                   <div style={{ fontSize:"2.5rem", marginBottom:".75rem" }}>🔐</div>
@@ -558,7 +578,7 @@ export default function Home() {
                 <>
                   <div style={{ marginBottom:"1.25rem" }}>
                     <p style={{ fontSize:".78rem", color:"var(--muted)", marginBottom:".6rem", lineHeight:1.6 }}>
-                      Paste a Share Link from the sender. Your wallet signature is required to unlock and download.
+                      Paste a Share Link from the sender. Your wallet signature is required to download.
                     </p>
                     <div style={{ display:"flex", gap:".5rem" }}>
                       <input type="text" value={findLink}
@@ -567,13 +587,11 @@ export default function Home() {
                         placeholder="Paste Share Link…"
                         style={{ flex:1, padding:".6rem .85rem", fontSize:".75rem", minWidth:0 }}
                       />
-                      <button onClick={doFind} disabled={finding || !findLink.trim()} type="button"
-                        style={{ flexShrink:0 }}>
+                      <button onClick={doFind} disabled={finding || !findLink.trim()} type="button" style={{ flexShrink:0 }}>
                         {finding ? "⏳" : "Find"}
                       </button>
                     </div>
                   </div>
-
                   {shared.length > 0 && (
                     <>
                       <div className={styles.sep} />
@@ -588,8 +606,7 @@ export default function Home() {
                                 <span className={styles.chip}>⏳ {ttl(f)}</span>
                               </div>
                               <div className={styles.progressWrap}>
-                                <div className={styles.progress}
-                                  style={{ width:`${pct(f)*100}%`, background:"linear-gradient(90deg,var(--cyan),#0099bb)" }} />
+                                <div className={styles.progress} style={{ width:`${pct(f)*100}%`, background:"linear-gradient(90deg,var(--cyan),#0099bb)" }} />
                               </div>
                             </div>
                             <div className={styles.actions}>
@@ -605,9 +622,7 @@ export default function Home() {
                       {shared.length > PREVIEW_COUNT && (
                         <button className={`ghost ${styles.showMoreBtn}`}
                           onClick={() => setShowAllShared(s => !s)} type="button">
-                          {showAllShared
-                            ? "▲ Show less"
-                            : `▼ Show ${shared.length - PREVIEW_COUNT} more file${shared.length - PREVIEW_COUNT !== 1 ? "s" : ""}`}
+                          {showAllShared ? "▲ Show less" : `▼ Show ${shared.length - PREVIEW_COUNT} more file${shared.length - PREVIEW_COUNT !== 1 ? "s" : ""}`}
                         </button>
                       )}
                     </>
@@ -624,7 +639,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── Footer ────────────────────────────────────────────────────── */}
+        {/* Footer */}
         <div className={styles.footer}>
           <span style={{ color:"var(--muted)", fontSize:".72rem" }}>
             DIOS v1 · AES-256-GCM encrypted · Built on ShelbyNet
@@ -636,7 +651,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── Wallet modal ──────────────────────────────────────────────────── */}
+      {/* Wallet modal */}
       {walletModal && (
         <div className={styles.overlay} onClick={() => setWalletModal(false)}>
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
@@ -664,7 +679,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* ── Share modal ───────────────────────────────────────────────────── */}
+      {/* Share modal */}
       {shareModal && shareTarget && (
         <div className={styles.overlay} onClick={closeShare}>
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
@@ -673,8 +688,6 @@ export default function Home() {
               <button className="ghost" onClick={closeShare} type="button"
                 style={{ minHeight:"auto", padding:".3rem .6rem" }}>✕</button>
             </div>
-
-            {/* File preview */}
             <div style={{
               background:"var(--accent-dim)", border:"1px solid var(--border)",
               borderRadius:12, padding:".75rem 1rem", marginBottom:"1.25rem",
@@ -690,11 +703,9 @@ export default function Home() {
                 </div>
               </div>
             </div>
-
             <p style={{ fontSize:".82rem", color:"var(--muted)", marginBottom:"1rem", lineHeight:1.6 }}>
               Enter the receiver's wallet address. A Share Link will be generated — they need both the link and their wallet to decrypt.
             </p>
-
             <label style={{ display:"block", fontSize:".72rem", color:"var(--muted)", marginBottom:".4rem", letterSpacing:".1em", textTransform:"uppercase" }}>
               Receiver Wallet Address
             </label>
@@ -706,7 +717,6 @@ export default function Home() {
               style={{ width:"100%", fontSize:".88rem", padding:".8rem" }}>
               {busy ? "Sharing…" : "🔗 Generate Share Link"}
             </button>
-
             {shareStatus && (
               <div style={{
                 marginTop:".85rem", padding:".65rem .9rem", borderRadius:10,

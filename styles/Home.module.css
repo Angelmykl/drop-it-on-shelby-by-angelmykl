@@ -20,7 +20,7 @@
 .title {
   font-family: 'Orbitron', monospace;
   font-weight: 900;
-  font-size: clamp(1.5rem, 5.5vw, 3rem);
+  font-size: clamp(1.1rem, 2.6vw, 1.75rem);
   letter-spacing: .06em;
   text-transform: uppercase;
   background: linear-gradient(135deg, var(--accent-bright) 0%, var(--accent) 40%, #7c3aed 100%);
@@ -162,12 +162,12 @@
 @media (max-width: 480px) { .durationGrid { grid-template-columns: repeat(2, 1fr); } }
 
 .durBtn {
-  padding: .6rem .5rem;
+  padding: .45rem .4rem;
   border-radius: 10px;
   border: 1.5px solid var(--border);
   background: var(--input-bg);
   color: var(--muted);
-  font-size: .78rem;
+  font-size: .72rem;
   font-family: 'Syne', sans-serif;
   font-weight: 600;
   text-align: center;
