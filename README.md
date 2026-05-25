@@ -95,7 +95,7 @@ SHELBYNET_API_KEY=your_api_key_here
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Live: https://drop-it-on-shelby-by-angelmykl.vercel.app/
 
 ### Add ShelbyNet to Petra Wallet
 
